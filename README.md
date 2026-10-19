@@ -49,18 +49,26 @@ mix ecto.drop   # or stop the docker container above (--rm discards it)
 
 ## What the test does
 
-`test/bulk_destroy_test.exs` creates a post and destroys it with
-`Ash.bulk_destroy/4` on a query for it (`strategy: [:atomic]`,
-`return_errors?: true` so the error is shown):
+`test/bulk_destroy_test.exs` creates a post and writes it with
+`Ash.bulk_destroy/4` or `Ash.bulk_update/4` on a query for it
+(`return_errors?: true`, so the error is shown):
 
 | Bulk action | Result |
 |---|---|
 | atomic bulk destroy, `notify?: true` | **fails**: `ERROR 42703 (undefined_column) column f.valid_at does not exist` |
 | atomic bulk destroy, `return_records?: true` | **fails**: the same error |
+| atomic bulk update, `notify?: true`, `select: [:id, :title]` | **fails**: the same error |
+| atomic bulk destroy, `notify?: true`, `select: [:id, :title, :valid_at]` | works |
 | atomic bulk destroy, returning nothing | works |
 | streamed bulk destroy, `notify?: true` | works |
 | atomic bulk update, `notify?: true` and `return_records?: true` | works |
 | `Ash.destroy!/1` on the record | works |
+
+The failures have one thing in common: the write returns records, and the
+selected columns leave out the period attribute (`valid_at`, which is private).
+A bulk destroy does that by default: with no `select`, it selects the public
+attributes. A bulk update selects the attributes selected by default, which
+include `valid_at`, so it only fails when given a `select` without it.
 
 The failing statement, shortened:
 

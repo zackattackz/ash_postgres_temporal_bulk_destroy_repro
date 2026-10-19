@@ -1,9 +1,12 @@
 defmodule Repro.BulkDestroyTest do
   @moduledoc """
-  On a temporal resource, an atomic bulk destroy of a query fails with an SQL
-  error when it has to return the destroyed records: with `notify?: true`, or
-  `return_records?: true`. The same bulk destroy without them works, and so
-  does a bulk update that returns records.
+  On a temporal resource, an atomic bulk write fails with an SQL error when it
+  returns records and the selected columns leave out the period attribute.
+
+  A bulk destroy does that by default: with no `select`, it selects the public
+  attributes, and the period attribute is private. A bulk update selects the
+  attributes selected by default, which include it, so it only fails when given
+  a `select` without it.
   """
   use ExUnit.Case, async: false
 
@@ -45,7 +48,34 @@ defmodule Repro.BulkDestroyTest do
     end
   end
 
+  describe "the same error, from an atomic bulk update that selects no period column" do
+    test "with notify?: true and select: [:id, :title]", %{query: query} do
+      result =
+        Ash.bulk_update(query, :update, %{title: "B"},
+          strategy: [:atomic],
+          notify?: true,
+          return_errors?: true,
+          select: [:id, :title]
+        )
+
+      assert %Ash.BulkResult{status: :success} = result
+    end
+  end
+
   describe "works" do
+    test "atomic bulk destroy of a query, with notify?: true and select including :valid_at",
+         %{post: post, query: query} do
+      assert %Ash.BulkResult{status: :success} =
+               Ash.bulk_destroy(query, :destroy, %{},
+                 strategy: [:atomic],
+                 notify?: true,
+                 return_errors?: true,
+                 select: [:id, :title, :valid_at]
+               )
+
+      assert gone?(post.id)
+    end
+
     test "atomic bulk destroy of a query, returning nothing", %{post: post, query: query} do
       assert %Ash.BulkResult{status: :success} =
                Ash.bulk_destroy(query, :destroy, %{}, strategy: [:atomic], return_errors?: true)
